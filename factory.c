@@ -15,6 +15,8 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <time.h>
+#include <pthread.h>
 
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -27,12 +29,18 @@
 
 typedef struct sockaddr SA ;
 
+typedef struct 
+{
+    int id, capacity, duration;
+} params_t;
+
+
 int minimum( int a , int b)
 {
     return ( a <= b ? a : b ) ; 
 }
 
-void subFactory( int factoryID , int myCapacity , int myDuration ) ;
+void *subFactory( void * ptr) ;
 
 void factLog( char *str )
 {
@@ -90,6 +98,12 @@ int main( int argc , char *argv[] )
         N    = atoi( argv[1] ) ; // get from command line
         port = atoi( argv[2] ) ; // use port from command line
         break;
+      case 4:
+        N    = atoi( argv[1] ) ; // get from command line
+        // I'll add somthing for the host's IP when I find out if there is an actual
+        // use for it. 
+        port = atoi( argv[3] ) ; // use port from command line
+        break;
 
       default:
         printf( "FACTORY Usage: %s [numThreads] [port]\n" , argv[0] );
@@ -137,6 +151,12 @@ int main( int argc , char *argv[] )
 
     int forever = 1;
     int purpose;
+
+    int capacity;
+    int duration;
+    srandom(time(NULL));
+    pthread_t thrd[N + 1];
+    params_t *argsPtr;
     while ( forever )
     {
         printf( "\nFACTORY server waiting for Order Requests\n" ) ; 
@@ -176,7 +196,6 @@ int main( int argc , char *argv[] )
 
         printf("\n\nFACTORY sent this Order Confirmation to the client " );
         printMsg(  & sending );  puts("");
-        
         // now convert the info for network
         if( sendto(sd, &sending, sizeof(sending), 0, (SA *) &clntSkt, alen) < 0 ) {
             printf("Error sending on server side\n");
@@ -184,18 +203,40 @@ int main( int argc , char *argv[] )
             close(sd);
             exit(EXIT_FAILURE);
         }
-        subFactory( 1 , 50 , 350 ) ;  // Single factory, ID=1 , capacity=50, duration=350 msg
+        //subFactory( 1 , 50 , 350 ) ;  // Single factory, ID=1 , capacity=50, duration=350 msg
+        // now spawn N sub-factory threads, capacity and duration should be randomized like in PA 2
+        for(int i = 1; i <= N; i++) {
+            capacity = (random() % 40) + 10;
+            duration = (random() % 700) + 500;
+            argsPtr = ( params_t *) malloc ( sizeof(params_t) ) ;
+            if (!argsPtr) {
+                printf("Out of memory\n");
+                close(sd);
+                exit(EXIT_FAILURE);
+            }
+            argsPtr->id = i;
+            argsPtr->capacity = capacity;
+            argsPtr->duration = duration;
+            Pthread_create( &thrd[i], NULL, subFactory, (void *) argsPtr);
+        }
     }
 
 
     return 0 ;
 }
 
-void subFactory( int factoryID , int myCapacity , int myDuration )
+void *subFactory( void * ptr)
 {
     char    strBuff[ MAXSTR ] ;   // print buffer
     int     partsImade = 0 , myIterations = 0 , partsMadeThisIteration;
     msgBuf  msg;
+
+    params_t *args = (params_t *) ptr;
+    int factoryID = args->id;
+    int myCapacity = args->capacity;
+    int myDuration = args->duration;
+    // free args as I no  longer need it
+    free(args);
 
     msg.facID = htonl(factoryID);
     msg.capacity = htonl(myCapacity);
@@ -246,5 +287,15 @@ void subFactory( int factoryID , int myCapacity , int myDuration )
     snprintf( strBuff , MAXSTR , ">>> Factory # %-3d: Terminating after making total of %-5d parts in %-4d iterations\n" 
           , factoryID, partsImade, myIterations);
     factLog( strBuff ) ;
+    pthread_exit(NULL);
     
+}
+
+void *dummy( void * ptr) {
+    params_t *args = (params_t *) ptr;
+    int factoryID = args->id;
+    int myCapacity = args->capacity;
+    int myDuration = args->duration;
+    printf("ID: %d\tCap: %d\tDurr: %d\n", factoryID, myCapacity, myDuration);
+    pthread_exit(NULL);
 }

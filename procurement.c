@@ -1,5 +1,5 @@
 //---------------------------------------------------------------------
-// Assignment : PA-03 UDP Single-Threaded Server
+// Assignment : PA-04
 // Date       :
 // Author     : Justin Bryan and Tyler Rabatin
 // File Name  : procurement.c
