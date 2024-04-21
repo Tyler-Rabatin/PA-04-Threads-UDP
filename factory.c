@@ -81,7 +81,8 @@ void goodbye(int sig)
 /*-------------------------------------------------------*/
 int main( int argc , char *argv[] )
 {
-    char  *myName = "Justin Bryan and Tyler Rabatin" ; 
+    char  *myName = "Justin Bryan and Tyler Rabatin" ,
+          *serverIP ;                  /* the ipv4 address of this server */
     unsigned short port = 50015 ;      /* service port number  */
     int    N = 1 ;                     /* Num threads serving the client */
     char *ipArg = "0.0.0.0";           /* placeholder address*/
@@ -103,7 +104,7 @@ int main( int argc , char *argv[] )
         break;
       case 4:
         N    = atoi( argv[1] ) ; // get from command line
-        ipArg = argv[2];
+        serverIP = argv[2];      // use IP address from command line
         port = atoi( argv[3] ) ; // use port from command line
         break;
 
@@ -133,8 +134,20 @@ int main( int argc , char *argv[] )
     memset( (void *) &srvrSkt, 0, sizeof(srvrSkt));
     memset( (void *) &clntSkt, 0, sizeof(clntSkt));
     srvrSkt.sin_family = AF_INET;
-    srvrSkt.sin_addr.s_addr = htonl( INADDR_ANY);
     srvrSkt.sin_port = htons(port);
+
+    // use the host IP address if one was provided through args
+    if (argc == 4) {
+        // convert string in ipv4 format into usable binary
+        if( inet_pton( AF_INET, serverIP , (void *) & srvrSkt.sin_addr.s_addr ) != 1 ) {
+            printf( "PROCUREMENT: Invalid IP address\n" );
+            perror("Failure: ");
+            close(sd);
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        srvrSkt.sin_addr.s_addr = htonl( INADDR_ANY);
+    }
 
     // bind server to socket
     if( bind(sd, (SA *) &srvrSkt, sizeof(srvrSkt) ) < 0) {
@@ -144,6 +157,7 @@ int main( int argc , char *argv[] )
         Sem_destroy(&threadMutex);
         exit(EXIT_FAILURE);
     }
+
     char ipStr[IPSTRLEN];
     if( inet_ntop( AF_INET, (void *) & srvrSkt.sin_addr.s_addr , ipStr , IPSTRLEN ) == NULL ) {
         printf("Error obtaining text of server IP\n");
@@ -153,7 +167,10 @@ int main( int argc , char *argv[] )
         exit(EXIT_FAILURE);
     }
 
-    printf("\nBound socket %d to IP %s Port %d\n", sd, ipArg, ntohs(srvrSkt.sin_port));
+    printf("I will attempt to accept orders at IP %s (%X): port %d and use %d sub-factories.\n\n", ipStr, ntohl(srvrSkt.sin_addr.s_addr), ntohs(srvrSkt.sin_port), N) ;
+
+
+    printf("Bound socket %d to IP %s Port %d\n", sd, ipStr, ntohs(srvrSkt.sin_port));
     unsigned int alen = sizeof(clntSkt);
 
     msgBuf receiving;
@@ -280,7 +297,7 @@ void *subFactory( void * ptr)
         Sem_post(&threadMutex);
 
         // sleep for duration milliseconds
-        Usleep(myDuration / 1000);
+        Usleep(myDuration * 1000);
 
         // Send a Production Message to Supervisor
         printf("Factory #%3d: Going to make %5d parts in %4d mSec\n", factoryID, partsMadeThisIteration, myDuration);
