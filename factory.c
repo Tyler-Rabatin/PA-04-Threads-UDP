@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <time.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -58,6 +59,7 @@ int   sd ;      // Server socket descriptor
 struct sockaddr_in  
              srvrSkt,       /* the address of this server   */
              clntSkt;       /* remote client's socket       */
+sem_t threadMutex;
 
 //------------------------------------------------------------
 //  Handle Ctrl-C or KILL 
@@ -70,7 +72,7 @@ void goodbye(int sig)
 
     // missing code goes here
     fflush( stdout ) ;
-    //kill(getpid(), sig);
+    Sem_destroy(&threadMutex);
     close(sd);
     exit(1);
 }
@@ -82,6 +84,7 @@ int main( int argc , char *argv[] )
     char  *myName = "Justin Bryan and Tyler Rabatin" ; 
     unsigned short port = 50015 ;      /* service port number  */
     int    N = 1 ;                     /* Num threads serving the client */
+    char *ipArg = "0.0.0.0";           /* placeholder address*/
 
     printf("\nThis is the FACTORY server developed by %s\n\n" , myName ) ;
 	switch (argc) 
@@ -100,8 +103,7 @@ int main( int argc , char *argv[] )
         break;
       case 4:
         N    = atoi( argv[1] ) ; // get from command line
-        // I'll add somthing for the host's IP when I find out if there is an actual
-        // use for it. 
+        ipArg = argv[2];
         port = atoi( argv[3] ) ; // use port from command line
         break;
 
@@ -114,12 +116,17 @@ int main( int argc , char *argv[] )
     sigactionWrapper(SIGINT, goodbye);
     sigactionWrapper(SIGTERM, goodbye);
 
-    // Set up server
+    // mutex should start available
+    Sem_init(&threadMutex, 1, 1);
 
+    // Set up server
+    int intIpArg = ntohl(inet_addr(ipArg));
+    printf("\nI will attempt to accept orders at IP %s (%08x): port %d and use %d sub-factories\n", ipArg, intIpArg, port, N);
     sd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sd < 0) {
         printf("Error creating socket, shutting down\n");
         perror("Failure: ");
+        Sem_destroy(&threadMutex);
         exit(EXIT_FAILURE);
     }
     // Prepare server's socket address structure
@@ -134,6 +141,7 @@ int main( int argc , char *argv[] )
         printf("Error binding server to socket\n");
         perror("Failure: ");
         close(sd);
+        Sem_destroy(&threadMutex);
         exit(EXIT_FAILURE);
     }
     char ipStr[IPSTRLEN];
@@ -141,9 +149,11 @@ int main( int argc , char *argv[] )
         printf("Error obtaining text of server IP\n");
         perror("Failure: ");
         close(sd);
+        Sem_destroy(&threadMutex);
         exit(EXIT_FAILURE);
     }
-    printf("Bound socket %d to IP %s Port %d\n", sd, ipStr, ntohs(srvrSkt.sin_port));
+
+    printf("\nBound socket %d to IP %s Port %d\n", sd, ipArg, ntohs(srvrSkt.sin_port));
     unsigned int alen = sizeof(clntSkt);
 
     msgBuf receiving;
@@ -165,6 +175,7 @@ int main( int argc , char *argv[] )
             printf("Error receiving on server side\n");
             perror("Failure: ");
             close(sd);
+            Sem_destroy(&threadMutex);
             exit(EXIT_FAILURE);
         }
 
@@ -176,6 +187,7 @@ int main( int argc , char *argv[] )
             printf("Error obtaining text of client IP\n");
             perror("Failure: ");
             close(sd);
+            Sem_destroy(&threadMutex);
             exit(EXIT_FAILURE);
         }
         printf("\tFrom IP %s Port %d\n", ipStr, clntSkt.sin_port);
@@ -201,6 +213,7 @@ int main( int argc , char *argv[] )
             printf("Error sending on server side\n");
             perror("Failure: ");
             close(sd);
+            Sem_destroy(&threadMutex);
             exit(EXIT_FAILURE);
         }
         //subFactory( 1 , 50 , 350 ) ;  // Single factory, ID=1 , capacity=50, duration=350 msg
@@ -212,12 +225,19 @@ int main( int argc , char *argv[] )
             if (!argsPtr) {
                 printf("Out of memory\n");
                 close(sd);
+                Sem_destroy(&threadMutex);
                 exit(EXIT_FAILURE);
             }
             argsPtr->id = i;
             argsPtr->capacity = capacity;
             argsPtr->duration = duration;
             Pthread_create( &thrd[i], NULL, subFactory, (void *) argsPtr);
+        }
+
+        // wait for subFactories threads to finish
+        for(int i = 1; i <= N; i++) {
+            printf("DEBUG: thread %d, has joined\n", i);
+            Pthread_join(thrd[i], NULL);
         }
     }
 
@@ -244,6 +264,9 @@ void *subFactory( void * ptr)
 
     while ( 1 )
     {
+        // remainsToMake is being referenced and caluclated here and is global.
+        // Therefore a mutex is used here.
+        Sem_wait(&threadMutex);
         // See if there are still any parts to manufacture
         if ( remainsToMake <= 0 )
             break ;   // Not anymore, exit the loop
@@ -254,6 +277,7 @@ void *subFactory( void * ptr)
 
         // decrements remainsToMake by the number of items this sub-factory will make
         remainsToMake -= partsMadeThisIteration;
+        Sem_post(&threadMutex);
 
         // sleep for duration milliseconds
         Usleep(myDuration / 1000);
@@ -266,6 +290,7 @@ void *subFactory( void * ptr)
             printf("Error sending on server side\n");
             perror("Failure: ");
             close(sd);
+            Sem_destroy(&threadMutex);
             exit(EXIT_FAILURE);
         }
 
@@ -281,6 +306,7 @@ void *subFactory( void * ptr)
         printf("Error sending on server side\n");
         perror("Failure: ");
         close(sd);
+        Sem_destroy(&threadMutex);
         exit(EXIT_FAILURE);
     }
     
@@ -289,13 +315,4 @@ void *subFactory( void * ptr)
     factLog( strBuff ) ;
     pthread_exit(NULL);
     
-}
-
-void *dummy( void * ptr) {
-    params_t *args = (params_t *) ptr;
-    int factoryID = args->id;
-    int myCapacity = args->capacity;
-    int myDuration = args->duration;
-    printf("ID: %d\tCap: %d\tDurr: %d\n", factoryID, myCapacity, myDuration);
-    pthread_exit(NULL);
 }
