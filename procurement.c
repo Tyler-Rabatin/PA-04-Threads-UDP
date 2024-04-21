@@ -145,17 +145,21 @@ int main( int argc , char *argv[] )
     // Print the summary report
     totalItems  = 0 ;
     printf("\n\n****** PROCUREMENT Summary Report ******\n");
+    printf("\tSub-Factory\tParts Made\tIterations\n");
 
     for(int i = 0; i < numFactories; i++) {
-        printf("Factory # %2d made a total of %4d parts in %5d iterations\n" , i+1, partsMade[i], iters[i]);
+        printf("\t\t%3d\t %9d\t %9d\n", i+1, partsMade[i], iters[i]);
+        //printf("Factory # %2d made a total of %4d parts in %5d iterations\n" , i+1, partsMade[i], iters[i]);
         totalItems+= partsMade[i];
     }
 
     printf("==============================\n") ;
 
     printf("Grand total parts made = %5d   vs  order size of %5d\n", totalItems, orderSize);
+    printf("Order-to-Completion time = %d millisecons\n", 0);
+    printf("STILL NEED TO FIND TIME IN MILLISECONDS\n");
 
-    printf( "\n>>> Supervisor Terminated\n");
+    printf( "\n>>> PROCUREMENT Terminated\n");
 
     close(sd);
 
