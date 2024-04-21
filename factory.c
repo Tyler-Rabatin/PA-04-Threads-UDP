@@ -118,11 +118,9 @@ int main( int argc , char *argv[] )
     sigactionWrapper(SIGTERM, goodbye);
 
     // mutex should start available
-    Sem_init(&threadMutex, 1, 1);
+    Sem_init(&threadMutex, 0, 1);
 
     // Set up server
-    int intIpArg = ntohl(inet_addr(ipArg));
-    printf("\nI will attempt to accept orders at IP %s (%08x): port %d and use %d sub-factories\n", ipArg, intIpArg, port, N);
     sd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sd < 0) {
         printf("Error creating socket, shutting down\n");
@@ -253,7 +251,6 @@ int main( int argc , char *argv[] )
 
         // wait for subFactories threads to finish
         for(int i = 1; i <= N; i++) {
-            printf("DEBUG: thread %d, has joined\n", i);
             Pthread_join(thrd[i], NULL);
         }
     }
@@ -281,12 +278,14 @@ void *subFactory( void * ptr)
 
     while ( 1 )
     {
-        // remainsToMake is being referenced and caluclated here and is global.
-        // Therefore a mutex is used here.
-        Sem_wait(&threadMutex);
+
         // See if there are still any parts to manufacture
         if ( remainsToMake <= 0 )
             break ;   // Not anymore, exit the loop
+
+        // remainsToMake is being referenced and caluclated here and is global.
+        // Therefore a mutex is used here.
+        Sem_wait(&threadMutex);
 
         // decides how many to make as the lesser or capacity and remainsToMake
         if (remainsToMake < myCapacity) partsMadeThisIteration = remainsToMake;
