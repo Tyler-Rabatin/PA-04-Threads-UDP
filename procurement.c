@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <time.h>
 
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -29,6 +30,9 @@ typedef struct sockaddr SA ;
 /*-------------------------------------------------------*/
 int main( int argc , char *argv[] )
 {
+    clock_t startTime,
+            endTime;
+
     int     numFactories ,      // Total Number of Factory Threads
             activeFactories ,   // How many are still alive and manufacturing parts
             iters[ MAXFACTORIES+1 ] = {0} ,  // num Iterations completed by each Factory
@@ -96,6 +100,8 @@ int main( int argc , char *argv[] )
         exit(EXIT_FAILURE);
     }
 
+    startTime = clock();
+
     printf("PROCUREMENT received this from the FACTORY server: "  );
     printMsg( & msg2 );  puts("\n");
 
@@ -105,11 +111,12 @@ int main( int argc , char *argv[] )
     int purpose;
     int factoryID;
     int made;
+
     // Monitor all Active Factory Lines & Collect Production Reports
     while ( activeFactories > 0 ) // wait for messages from sub-factories
     {
         msgBuf msg3;
-        // First recive a message
+        // First receive a message
         if( recvfrom(sd, &msg3, sizeof(msg3), 0, (SA *) &srvrSkt, &alen) < 0 ) {
             printf("Error receiving on procurement side\n");
             perror("Failure: ");
@@ -142,6 +149,9 @@ int main( int argc , char *argv[] )
         }
     } 
 
+    endTime = clock();
+    double totalDuration = ((double) (endTime - startTime)) / CLOCKS_PER_SEC * 1000000;
+
     // Print the summary report
     totalItems  = 0 ;
     printf("\n\n****** PROCUREMENT Summary Report ******\n");
@@ -153,11 +163,12 @@ int main( int argc , char *argv[] )
         totalItems+= partsMade[i];
     }
 
-    printf("==============================\n") ;
+    printf("=======================================================\n");
 
     printf("Grand total parts made = %5d   vs  order size of %5d\n", totalItems, orderSize);
-    printf("Order-to-Completion time = %d millisecons\n", 0);
-    printf("STILL NEED TO FIND TIME IN MILLISECONDS\n");
+    printf("Order-to-Completion time = %.1lf milliseconds\n", totalDuration);
+    // printf("WE STILL NEED TO FIND TIME IN MILLISECONDS\n((endTime - startTime) / CLOCKS_PER_SEC (from time.h))\n");
+    printf("VALUE FOR TIME IN MS IS INCORRECT SOMEHOW. DOES NOT SEEM TO BE AFFECTED BY WHEN FACTORY CALLS CLOCK()\n");
 
     printf( "\n>>> PROCUREMENT Terminated\n");
 

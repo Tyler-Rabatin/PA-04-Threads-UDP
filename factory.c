@@ -53,7 +53,9 @@ void factLog( char *str )
 
 // Global Variable for Future Thread to Shared
 int   remainsToMake , // Must be protected by a Mutex
-      actuallyMade ;  // Actually manufactured items
+      actuallyMade ,  // Actually manufactured items
+      * eachPartsMade ,      // Hold the # of iterations for each sub-factory
+      * iters ;         // Hold the # of iterations for each sub-factory
 
 int   sd ;      // Server socket descriptor
 struct sockaddr_in  
@@ -81,6 +83,8 @@ void goodbye(int sig)
 /*-------------------------------------------------------*/
 int main( int argc , char *argv[] )
 {
+    clock_t  startTime , // the time (in ms)
+             endTime ;
     char  *myName = "Justin Bryan and Tyler Rabatin" ,
           *serverIP ;                  /* the ipv4 address of this server */
     unsigned short port = 50015 ;      /* service port number  */
@@ -179,11 +183,16 @@ int main( int argc , char *argv[] )
 
     int capacity;
     int duration;
+    int orderSize;
     srandom(time(NULL));
     pthread_t thrd[N + 1];
     params_t *argsPtr;
     while ( forever )
     {
+        // initialize arrays holding parts made and iterations
+        eachPartsMade    = malloc(N * sizeof(int));
+        iters = malloc(N * sizeof(int));
+
         printf( "\nFACTORY server waiting for Order Requests\n" ) ; 
 
         if(recvfrom(sd, &receiving, sizeof(receiving), 0, (SA *) &clntSkt, &alen) < 0) {
@@ -212,6 +221,7 @@ int main( int argc , char *argv[] )
 
         if(purpose = REQUEST_MSG) {
             remainsToMake = ntohl(receiving.orderSize);
+            orderSize = remainsToMake;
             sending.purpose = htonl(ORDR_CONFIRM);
             sending.numFac = htonl(N);
             
@@ -231,6 +241,10 @@ int main( int argc , char *argv[] )
             Sem_destroy(&threadMutex);
             exit(EXIT_FAILURE);
         }
+
+        startTime = clock();
+        actuallyMade = 0;
+
         //subFactory( 1 , 50 , 350 ) ;  // Single factory, ID=1 , capacity=50, duration=350 msg
         // now spawn N sub-factory threads, capacity and duration should be randomized like in PA 2
         for(int i = 1; i <= N; i++) {
@@ -253,7 +267,32 @@ int main( int argc , char *argv[] )
         for(int i = 1; i <= N; i++) {
             Pthread_join(thrd[i], NULL);
         }
+
+        endTime = clock(); // time since production has completed
+        double totalDuration = ((double) (endTime - startTime)) / CLOCKS_PER_SEC * 1000000;
+
+        // collect status
+        int totalIterations = 0;
+        for(int i = 0; i < N; i++) {
+            totalIterations += iters[i];
+        }
+
+        // print summary report
+        printf("\n****** FACTORY Server Summary Report ******\n");
+        printf("\tSub-Factory\tParts Made\tIterations\n");
+        for(int i = 1; i <= N; i++) {
+            printf("\t\t%3d\t %9d\t %9d\n", i, eachPartsMade[i - 1], iters[i - 1]);
+        }
+        printf("=======================================================\n");
+        printf("Grand total parts made\t=\t%d\tvs\torder size of\t%d\n", actuallyMade, ntohl(receiving.orderSize));
+        printf("Order-to-Completion time =\t%.1lf milliSeconds\n\n", totalDuration);
+        // printf("WE STILL NEED TO FIND TIME IN MILLISECONDS\n((endTime - startTime) / CLOCKS_PER_SEC (from time.h))\n");
+
+        free(eachPartsMade);
+        free(iters);
     }
+
+
 
 
     return 0 ;
@@ -276,9 +315,9 @@ void *subFactory( void * ptr)
     msg.capacity = htonl(myCapacity);
     msg.duration = htonl(myDuration);
 
+
     while ( 1 )
     {
-
         // See if there are still any parts to manufacture
         if ( remainsToMake <= 0 )
             break ;   // Not anymore, exit the loop
@@ -293,6 +332,8 @@ void *subFactory( void * ptr)
 
         // decrements remainsToMake by the number of items this sub-factory will make
         remainsToMake -= partsMadeThisIteration;
+        // increments actuallyMade by the number of items this sub-factory will make
+        actuallyMade += partsMadeThisIteration;
         Sem_post(&threadMutex);
 
         // sleep for duration milliseconds
@@ -329,6 +370,9 @@ void *subFactory( void * ptr)
     snprintf( strBuff , MAXSTR , ">>> Factory # %-3d: Terminating after making total of %-5d parts in %-4d iterations\n" 
           , factoryID, partsImade, myIterations);
     factLog( strBuff ) ;
+    // update status
+    eachPartsMade[factoryID - 1] = partsImade;
+    iters[factoryID - 1] = myIterations;
     pthread_exit(NULL);
     
 }
