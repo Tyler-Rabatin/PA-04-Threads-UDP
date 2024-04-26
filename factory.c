@@ -21,6 +21,7 @@
 
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 
 #include "wrappers.h"
 #include "message.h"
@@ -83,13 +84,12 @@ void goodbye(int sig)
 /*-------------------------------------------------------*/
 int main( int argc , char *argv[] )
 {
-    clock_t  startTime , // the time (in ms)
-             endTime ;
     char  *myName = "Justin Bryan and Tyler Rabatin" ,
           *serverIP ;                  /* the ipv4 address of this server */
     unsigned short port = 50015 ;      /* service port number  */
     int    N = 1 ;                     /* Num threads serving the client */
     char *ipArg = "0.0.0.0";           /* placeholder address*/
+    struct timeval startTime, endTime;
 
     printf("\nThis is the FACTORY server developed by %s\n\n" , myName ) ;
 	switch (argc) 
@@ -241,8 +241,13 @@ int main( int argc , char *argv[] )
             Sem_destroy(&threadMutex);
             exit(EXIT_FAILURE);
         }
-
-        startTime = clock();
+        if(gettimeofday(&startTime, NULL) < 0) {
+            printf("Error getting start time of after confirming order\n");
+            perror("Failure: ");
+            close(sd);
+            Sem_destroy(&threadMutex);
+            exit(EXIT_FAILURE);
+        }
         actuallyMade = 0;
 
         //subFactory( 1 , 50 , 350 ) ;  // Single factory, ID=1 , capacity=50, duration=350 msg
@@ -267,9 +272,13 @@ int main( int argc , char *argv[] )
         for(int i = 1; i <= N; i++) {
             Pthread_join(thrd[i], NULL);
         }
-
-        endTime = clock(); // time since production has completed
-        double totalDuration = ((double) (endTime - startTime)) / CLOCKS_PER_SEC * 1000000;
+        if( gettimeofday(&endTime, NULL) < 0 ) {
+            printf("Error getting start time of after completing order\n");
+            perror("Failure: ");
+            close(sd);
+            Sem_destroy(&threadMutex);
+            exit(EXIT_FAILURE);
+        }
 
         // collect status
         int totalIterations = 0;
@@ -279,13 +288,17 @@ int main( int argc , char *argv[] )
 
         // print summary report
         printf("\n****** FACTORY Server Summary Report ******\n");
-        printf("\tSub-Factory\tParts Made\tIterations\n");
+        printf("    Sub-Factory\tParts Made\tIterations\n");
         for(int i = 1; i <= N; i++) {
-            printf("\t\t%3d\t %9d\t %9d\n", i, eachPartsMade[i - 1], iters[i - 1]);
+            printf("\t%7d\t %d\t %9d\n", i, eachPartsMade[i - 1], iters[i - 1]);
         }
         printf("=======================================================\n");
         printf("Grand total parts made\t=\t%d\tvs\torder size of\t%d\n", actuallyMade, ntohl(receiving.orderSize));
-        printf("Order-to-Completion time =\t%.1lf milliSeconds\n\n", totalDuration);
+        // convert start and end time to milliseconds, tv_sec is in seconds, and tv_usec is in microseconds
+        double startTimeMilli = ((double)startTime.tv_sec * 1000) + ((double)startTime.tv_usec / 1000);
+        double endTimeMilli = ((double)endTime.tv_sec * 1000) + ((double)endTime.tv_usec / 1000);
+        // subtract the end time by the start time to find the elapsed time
+        printf("Order-to-Completion time =\t%.1lf milliSeconds\n\n", endTimeMilli - startTimeMilli);
         // printf("WE STILL NEED TO FIND TIME IN MILLISECONDS\n((endTime - startTime) / CLOCKS_PER_SEC (from time.h))\n");
 
         free(eachPartsMade);

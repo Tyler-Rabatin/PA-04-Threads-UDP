@@ -19,6 +19,7 @@
 
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 
 #include "wrappers.h"
 #include "message.h"
@@ -30,18 +31,16 @@ typedef struct sockaddr SA ;
 /*-------------------------------------------------------*/
 int main( int argc , char *argv[] )
 {
-    clock_t startTime,
-            endTime;
-
     int     numFactories ,      // Total Number of Factory Threads
             activeFactories ,   // How many are still alive and manufacturing parts
             iters[ MAXFACTORIES+1 ] = {0} ,  // num Iterations completed by each Factory
             partsMade[ MAXFACTORIES+1 ] = {0} , totalItems = 0;
+    struct timeval startTime, endTime;
 
     char  *myName = "Justin Bryan and Tyler Rabatin" ; 
     printf("\nPROCUREMENT: Started. Developed by %s\n\n" , myName );    
     fflush( stdout ) ;
-    
+
     if ( argc < 4 )
     {
         printf("PROCUREMENT Usage: %s  <order_size> <FactoryServerIP>  <port>\n" , argv[0] );
@@ -99,8 +98,12 @@ int main( int argc , char *argv[] )
         close(sd);
         exit(EXIT_FAILURE);
     }
-
-    startTime = clock();
+    if(gettimeofday(&startTime, NULL) < 0) {
+        printf("Error getting start time of order confirmation\n");
+        perror("Failure: ");
+        close(sd);
+        exit(EXIT_FAILURE);
+    }
 
     printf("PROCUREMENT received this from the FACTORY server: "  );
     printMsg( & msg2 );  puts("\n");
@@ -148,9 +151,13 @@ int main( int argc , char *argv[] )
                 break;
         }
     } 
+    if(gettimeofday(&endTime, NULL) < 0) {
+        printf("Error getting end time of after order completion\n");
+        perror("Failure: ");
+        close(sd);
+        exit(EXIT_FAILURE);
+    }
 
-    endTime = clock();
-    double totalDuration = ((double) (endTime - startTime)) / CLOCKS_PER_SEC * 1000000;
 
     // Print the summary report
     totalItems  = 0 ;
@@ -166,9 +173,11 @@ int main( int argc , char *argv[] )
     printf("=======================================================\n");
 
     printf("Grand total parts made = %5d   vs  order size of %5d\n", totalItems, orderSize);
-    printf("Order-to-Completion time = %.1lf milliseconds\n", totalDuration);
-    // printf("WE STILL NEED TO FIND TIME IN MILLISECONDS\n((endTime - startTime) / CLOCKS_PER_SEC (from time.h))\n");
-    printf("VALUE FOR TIME IN MS IS INCORRECT SOMEHOW. DOES NOT SEEM TO BE AFFECTED BY WHEN FACTORY CALLS CLOCK()\n");
+    // convert start and end time to milliseconds, tv_sec is in seconds, and tv_usec is in microseconds
+    double startTimeMilli = ((double)startTime.tv_sec * 1000) + ((double)startTime.tv_usec / 1000);
+    double endTimeMilli = ((double)endTime.tv_sec * 1000) + ((double)endTime.tv_usec / 1000);
+    // subtract the end time by the start time to find the elapsed time
+    printf("Order-to-Completion time = %.1lf milliseconds\n", endTimeMilli - startTimeMilli);
 
     printf( "\n>>> PROCUREMENT Terminated\n");
 
