@@ -162,17 +162,17 @@ int main( int argc , char *argv[] )
     // Print the summary report
     totalItems  = 0 ;
     printf("\n\n****** PROCUREMENT Summary Report ******\n");
-    printf("\tSub-Factory\tParts Made\tIterations\n");
+    printf("    Sub-Factory      Parts Made      Iterations\n");
 
     for(int i = 0; i < numFactories; i++) {
-        printf("\t\t%3d\t %9d\t %9d\n", i+1, partsMade[i], iters[i]);
+        printf("\t%7d       %9d       %9d\n", i+1, partsMade[i], iters[i]);
         //printf("Factory # %2d made a total of %4d parts in %5d iterations\n" , i+1, partsMade[i], iters[i]);
         totalItems+= partsMade[i];
     }
 
-    printf("=======================================================\n");
+    printf("===================================================\n");
 
-    printf("Grand total parts made = %5d   vs  order size of %5d\n", totalItems, orderSize);
+    printf("Grand total parts made   = %5d   vs  order size of %5d\n", totalItems, orderSize);
     // convert start and end time to milliseconds, tv_sec is in seconds, and tv_usec is in microseconds
     double startTimeMilli = ((double)startTime.tv_sec * 1000) + ((double)startTime.tv_usec / 1000);
     double endTimeMilli = ((double)endTime.tv_sec * 1000) + ((double)endTime.tv_usec / 1000);
